@@ -2,9 +2,5 @@
   "functions": {
     "api/forecast.py": { "runtime": "python3.12", "maxDuration": 30 },
     "api/dbtest.py":   { "runtime": "python3.12", "maxDuration": 20 }
-  },
-  "rewrites": [
-    { "source": "/",      "destination": "/public/index.html" },
-    { "source": "/(.*)", "destination": "/public/$1" }
-  ]
+  }
 }
