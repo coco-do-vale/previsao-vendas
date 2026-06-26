@@ -1,1 +1,2 @@
+# pymssql adicionado após confirmar que o build básico funciona
 pymssql>=2.3.1

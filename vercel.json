@@ -1,14 +1,15 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/forecast.py", "use": "@vercel/python" },
+    { "src": "api/hello.py",    "use": "@vercel/python" },
     { "src": "api/dbtest.py",   "use": "@vercel/python" },
+    { "src": "api/forecast.py", "use": "@vercel/python" },
     { "src": "index.html",      "use": "@vercel/static"  }
   ],
   "routes": [
-    { "src": "/api/forecast", "dest": "/api/forecast" },
-    { "src": "/api/dbtest",   "dest": "/api/dbtest"   },
-    { "src": "/",             "dest": "/index.html"   },
-    { "src": "/(.*)",         "dest": "/index.html"   }
+    { "src": "/api/hello",    "dest": "/api/hello.py"    },
+    { "src": "/api/dbtest",   "dest": "/api/dbtest.py"   },
+    { "src": "/api/forecast", "dest": "/api/forecast.py" },
+    { "src": "/(.*)",         "dest": "/index.html"       }
   ]
 }
