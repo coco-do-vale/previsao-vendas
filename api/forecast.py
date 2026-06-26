@@ -6,6 +6,7 @@ Consulta SD2010 (itens NF saída) + SA1010 (clientes) do ERP Protheus.
 import json
 import os
 import calendar
+import traceback
 from datetime import date
 from http.server import BaseHTTPRequestHandler
 
@@ -68,8 +69,9 @@ def connect():
         password=os.environ["DB_PASSWORD"],
         database=os.environ["DB_DATABASE"],
         as_dict=True,
-        timeout=30,
+        timeout=25,
         login_timeout=10,
+        tds_version="7.0",   # evita problemas de SSL/TLS com certificados auto-assinados
     )
 
 # ---------------------------------------------------------------------------
@@ -192,9 +194,12 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         except Exception as exc:
-            msg = json.dumps({"error": str(exc)}).encode()
+            msg = json.dumps({
+                "error":     str(exc),
+                "traceback": traceback.format_exc(),
+            }, ensure_ascii=False).encode("utf-8")
             self.send_response(500)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(msg)
