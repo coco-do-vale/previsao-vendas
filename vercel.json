@@ -1,17 +1,10 @@
 {
-  "version": 2,
   "functions": {
     "api/forecast.py": { "runtime": "python3.12", "maxDuration": 30 },
     "api/dbtest.py":   { "runtime": "python3.12", "maxDuration": 20 }
   },
-  "builds": [
-    { "src": "api/forecast.py", "use": "@vercel/python" },
-    { "src": "api/dbtest.py",   "use": "@vercel/python" },
-    { "src": "public/**",       "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/forecast", "dest": "/api/forecast.py" },
-    { "src": "/api/dbtest",   "dest": "/api/dbtest.py"   },
-    { "src": "/(.*)",         "dest": "/public/$1"        }
+  "rewrites": [
+    { "source": "/",      "destination": "/public/index.html" },
+    { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }
