@@ -424,11 +424,23 @@ async function loadData() {
 
   try {
     const resp = await fetch(API + '?t=' + Date.now());
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
 
-    // cabeçalho
+    if (!resp.ok) {
+      // lê o corpo do erro para mostrar a causa real
+      let detail = `HTTP ${resp.status}`;
+      try {
+        const errBody = await resp.json();
+        if (errBody.error)     detail += '\n\n' + errBody.error;
+        if (errBody.traceback) console.error('Traceback:\n', errBody.traceback);
+      } catch (_) { /* ignora se o corpo não for JSON */ }
+      showError(detail);
+      return;
+    }
+
+    const data = await resp.json();
+    if (data.error) { showError(data.error); return; }
+
+    hideError();
     document.getElementById('last-update').textContent = dateFmt(data.updated_at);
     document.getElementById('period-badge').textContent =
       `12M: ${data.period.d_12m.slice(0,4)}/${data.period.d_12m.slice(4,6)} → hoje`;
@@ -441,12 +453,44 @@ async function loadData() {
 
     startCountdown();
   } catch (err) {
-    alert('Erro ao carregar dados:\n' + err.message);
+    showError('Falha de rede ou o servidor está inacessível:\n' + err.message);
     console.error(err);
   } finally {
     overlay.classList.remove('show');
     btn.classList.remove('loading');
   }
+}
+
+// ── Erro visível na página ────────────────────────────────────────────────
+function showError(msg) {
+  let el = document.getElementById('error-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'error-banner';
+    el.style.cssText = [
+      'position:fixed','bottom:16px','left:50%','transform:translateX(-50%)',
+      'background:#1e1e2e','color:#f38ba8','border:1px solid #f38ba8',
+      'border-radius:10px','padding:14px 20px','max-width:640px','width:90%',
+      'font-size:12px','line-height:1.6','z-index:999','white-space:pre-wrap',
+      'box-shadow:0 4px 24px rgba(0,0,0,.5)',
+    ].join(';');
+    // link para diagnóstico
+    const link = document.createElement('a');
+    link.href = '/api/dbtest';
+    link.target = '_blank';
+    link.textContent = 'Abrir diagnóstico /api/dbtest →';
+    link.style.cssText = 'display:block;margin-top:8px;color:#89b4fa;text-decoration:underline;font-weight:600;';
+    el.appendChild(document.createTextNode(''));  // placeholder para o texto
+    el.appendChild(link);
+    document.body.appendChild(el);
+  }
+  el.firstChild.textContent = '⚠ Erro ao carregar dados:\n' + msg + '\n';
+  el.style.display = 'block';
+}
+
+function hideError() {
+  const el = document.getElementById('error-banner');
+  if (el) el.style.display = 'none';
 }
 
 // ── Inicialização ─────────────────────────────────────────────────────────
