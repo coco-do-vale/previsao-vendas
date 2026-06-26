@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Previsão de Vendas</title>
+<style>
+/* ── Reset & Variáveis ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:    #1e3a5f;
+  --blue:    #0ea5e9;
+  --green:   #16a34a;
+  --red:     #dc2626;
+  --amber:   #d97706;
+  --bg:      #f1f5f9;
+  --white:   #ffffff;
+  --text:    #1e293b;
+  --muted:   #64748b;
+  --border:  #e2e8f0;
+  --hdr:     56px;
+  --card-h:  90px;
+  --tab-h:   44px;
+  --shadow:  0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+}
+
+/* ── Tipografia base ───────────────────────────────────────────────────── */
+body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px;
+       background: var(--bg); color: var(--text); overflow-x: hidden; }
+
+/* ── Header fixo ──────────────────────────────────────────────────────── */
+#header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--hdr);
+  background: var(--navy); color: #fff; display: flex; align-items: center;
+  padding: 0 20px; gap: 16px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+#header h1 { font-size: 15px; font-weight: 700; white-space: nowrap; }
+#header .badge {
+  background: var(--blue); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+}
+#header .spacer { flex: 1; }
+#header .meta { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+#header .meta strong { color: #e2e8f0; }
+#btn-refresh {
+  background: var(--blue); color: #fff; border: none; border-radius: 6px;
+  padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  transition: background .15s;
+}
+#btn-refresh:hover { background: #0284c7; }
+#btn-refresh svg { width:14px; height:14px; }
+#btn-refresh.loading svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Conteúdo (abaixo do header) ──────────────────────────────────────── */
+#app { margin-top: var(--hdr); display: flex; flex-direction: column; height: calc(100vh - var(--hdr)); }
+
+/* ── Cards de resumo ──────────────────────────────────────────────────── */
+#cards {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px; padding: 10px 16px; background: var(--white);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.card {
+  border-radius: 8px; padding: 10px 14px;
+  border: 1px solid var(--border); background: var(--bg);
+}
+.card .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.card .value { font-size: 18px; font-weight: 700; margin-top: 2px; color: var(--navy); }
+.card .sub   { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.card.highlight { background: var(--navy); border-color: var(--navy); }
+.card.highlight .label, .card.highlight .sub { color: #94a3b8; }
+.card.highlight .value { color: #fff; }
+
+/* ── Abas ─────────────────────────────────────────────────────────────── */
+#tabs {
+  display: flex; gap: 0; background: var(--white);
+  border-bottom: 2px solid var(--border); flex-shrink: 0;
+  padding: 0 16px;
+}
+.tab-btn {
+  padding: 10px 20px; border: none; background: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+/* ── Área de tabelas (scrollável) ─────────────────────────────────────── */
+#tab-content { flex: 1; overflow: hidden; position: relative; }
+.tab-panel { display: none; height: 100%; overflow-y: auto; }
+.tab-panel.active { display: block; }
+
+/* barra de busca */
+.search-bar {
+  padding: 8px 16px; background: var(--white);
+  border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center;
+  position: sticky; top: 0; z-index: 5;
+}
+.search-bar input {
+  flex: 1; max-width: 320px; border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; font-size: 12px;
+  outline: none; color: var(--text);
+}
+.search-bar input:focus { border-color: var(--blue); }
+.search-bar .count { font-size: 11px; color: var(--muted); }
+
+/* ── Tabela ───────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  background: var(--white);
+}
+thead th {
+  background: var(--navy); color: #e2e8f0; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px;
+  padding: 9px 12px; text-align: left; white-space: nowrap;
+  position: sticky; top: 0; z-index: 4;
+}
+thead th.r { text-align: right; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:hover { background: #f8fafc; }
+tbody td { padding: 8px 12px; vertical-align: middle; }
+tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
+tbody td.mono { font-family: ui-monospace, monospace; font-size: 11px; }
+
+/* badges de tendência */
+.trend {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+}
+.trend.up   { background: #dcfce7; color: var(--green); }
+.trend.down { background: #fee2e2; color: var(--red); }
+.trend.flat { background: #fef9c3; color: var(--amber); }
+
+/* célula de projeção */
+td.proj { font-weight: 700; color: var(--navy); background: #f0f9ff !important; }
+
+/* linha de totais */
+tr.total-row td {
+  background: #1e3a5f !important; color: #fff !important;
+  font-weight: 700; border-top: 2px solid var(--blue);
+}
+tr.total-row td .trend.up   { background: rgba(255,255,255,.15); color: #86efac; }
+tr.total-row td .trend.down { background: rgba(255,255,255,.15); color: #fca5a5; }
+
+/* ── Loading overlay ──────────────────────────────────────────────────── */
+#overlay {
+  display: none; position: fixed; inset: 0; background: rgba(30,58,95,.55);
+  z-index: 200; align-items: center; justify-content: center; flex-direction: column;
+  gap: 14px; color: #fff; font-size: 14px;
+}
+#overlay.show { display: flex; }
+.spinner {
+  width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+
+/* ── Erro ─────────────────────────────────────────────────────────────── */
+#error-msg {
+  display: none; margin: 16px; padding: 12px 16px;
+  background: #fff5f5; border: 1px solid #fecaca; border-radius: 8px;
+  color: var(--red); font-size: 12px;
+}
+#error-msg.show { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ HEADER FIXO ════════════════════ -->
+<header id="header">
+  <h1>Previsão de Vendas</h1>
+  <span class="badge" id="period-badge">carregando…</span>
+  <div class="spacer"></div>
+  <span class="meta">
+    <strong id="last-update">–</strong>
+    &nbsp;·&nbsp; próx. atualização <strong id="countdown">–</strong>
+  </span>
+  <button id="btn-refresh">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M23 4v6h-6M1 20v-6h6"/>
+      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+    </svg>
+    Atualizar
+  </button>
+</header>
+
+<!-- ════════════════════ APP ════════════════════ -->
+<div id="app">
+
+  <!-- Cards de resumo -->
+  <div id="cards">
+    <div class="card highlight">
+      <div class="label">Faturamento 12 meses</div>
+      <div class="value" id="c-12m">–</div>
+      <div class="sub">últimos 12 meses</div>
+    </div>
+    <div class="card">
+      <div class="label">Último trimestre (real)</div>
+      <div class="value" id="c-3m">–</div>
+      <div class="sub" id="c-3m-label">–</div>
+    </div>
+    <div class="card">
+      <div class="label">Projeção próx. trimestre</div>
+      <div class="value" id="c-proj">–</div>
+      <div class="sub">estimativa Q3/2026</div>
+    </div>
+    <div class="card">
+      <div class="label">Tendência (último vs anterior)</div>
+      <div class="value" id="c-trend">–</div>
+      <div class="sub">variação trimestral</div>
+    </div>
+  </div>
+
+  <!-- Abas -->
+  <div id="tabs">
+    <button class="tab-btn active" data-target="tab-grupos">Por Tipo de Produto</button>
+    <button class="tab-btn" data-target="tab-clientes">Por Cliente</button>
+  </div>
+
+  <!-- Conteúdo -->
+  <div id="tab-content">
+
+    <!-- ── Aba 1: Grupos ── -->
+    <div id="tab-grupos" class="tab-panel active">
+      <div id="error-msg-g" class="error-msg" style="display:none; margin:16px; padding:12px 16px;
+           background:#fff5f5; border:1px solid #fecaca; border-radius:8px; color:#dc2626; font-size:12px;"></div>
+      <div class="table-wrap">
+        <table id="tbl-grupos">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Tipo / Produto</th>
+              <th class="r">12M Real (R$)</th>
+              <th class="r">Últ. Trimestre</th>
+              <th class="r">Trim. Anterior</th>
+              <th class="r">Tendência</th>
+              <th class="r">Projeção Q3 (R$)</th>
+            </tr>
+          </thead>
+          <tbody id="body-grupos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Aba 2: Clientes ── -->
+    <div id="tab-clientes" class="tab-panel">
+      <div class="search-bar">
+        <input id="search-clientes" type="search" placeholder="Filtrar por cliente, UF ou produto…">
+        <span class="count" id="count-clientes"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-clientes">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>UF</th>
+              <th>Tipo / Produto</th>
+              <th class="r">12M Real (R$)</th>
+              <th class="r">Últ. Trimestre</th>
+              <th class="r">Trim. Anterior</th>
+              <th class="r">Tendência</th>
+              <th class="r">Projeção Q3 (R$)</th>
+            </tr>
+          </thead>
+          <tbody id="body-clientes"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- #tab-content -->
+</div><!-- #app -->
+
+<!-- Loading overlay -->
+<div id="overlay">
+  <div class="spinner"></div>
+  <span>Consultando banco de dados…</span>
+</div>
+
+<!-- ════════════════════ SCRIPT ════════════════════ -->
+<script>
+const API = '/api/forecast';
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutos
+
+let countdownTimer   = null;
+let countdownSeconds = REFRESH_INTERVAL / 1000;
+let allClients       = [];
+
+// ── Formatação ────────────────────────────────────────────────────────────
+const BRL  = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const BRLk = (v) => {
+  if (v >= 1e6) return 'R$ ' + (v / 1e6).toFixed(1).replace('.', ',') + ' M';
+  if (v >= 1e3) return 'R$ ' + (v / 1e3).toFixed(0) + ' K';
+  return BRL.format(v);
+};
+const pct = (v) => {
+  if (v === null || v === undefined) return '<span class="trend flat">–</span>';
+  const cls = v > 5 ? 'up' : v < -5 ? 'down' : 'flat';
+  const arrow = v > 0 ? '▲' : v < 0 ? '▼' : '●';
+  const sign  = v > 0 ? '+' : '';
+  return `<span class="trend ${cls}">${arrow} ${sign}${v.toFixed(1)}%</span>`;
+};
+const dateFmt = (iso) => {
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+};
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+  });
+});
+
+// ── Busca em clientes ─────────────────────────────────────────────────────
+document.getElementById('search-clientes').addEventListener('input', function () {
+  renderClients(allClients, this.value.toLowerCase());
+});
+
+// ── Render grupos ─────────────────────────────────────────────────────────
+function renderGroups(groups) {
+  const tbody = document.getElementById('body-grupos');
+  let html = '';
+  let tot12 = 0, tot3m = 0, tot3ant = 0, totprj = 0;
+
+  groups.forEach(g => {
+    tot12  += g.VLR_12M;
+    tot3m  += g.VLR_3M;
+    tot3ant += g.VLR_3M_ANT;
+    totprj  += g.PROJECAO_3M;
+    html += `<tr>
+      <td class="mono">${g.GRUPO}</td>
+      <td>${g.DESCRICAO}</td>
+      <td class="r">${BRL.format(g.VLR_12M)}</td>
+      <td class="r">${BRL.format(g.VLR_3M)}</td>
+      <td class="r">${BRL.format(g.VLR_3M_ANT)}</td>
+      <td class="r">${pct(g.TENDENCIA)}</td>
+      <td class="r proj">${BRL.format(g.PROJECAO_3M)}</td>
+    </tr>`;
+  });
+
+  const trendTot = tot3ant > 0 ? (tot3m - tot3ant) / tot3ant * 100 : null;
+  html += `<tr class="total-row">
+    <td colspan="2">TOTAL</td>
+    <td class="r">${BRL.format(tot12)}</td>
+    <td class="r">${BRL.format(tot3m)}</td>
+    <td class="r">${BRL.format(tot3ant)}</td>
+    <td class="r">${pct(trendTot ? Math.round(trendTot * 10) / 10 : null)}</td>
+    <td class="r proj">${BRL.format(totprj)}</td>
+  </tr>`;
+
+  tbody.innerHTML = html;
+}
+
+// ── Render clientes ───────────────────────────────────────────────────────
+function renderClients(clients, filter = '') {
+  const tbody  = document.getElementById('body-clientes');
+  const countEl = document.getElementById('count-clientes');
+
+  const filtered = filter
+    ? clients.filter(c =>
+        (c.CLIENTE || '').toLowerCase().includes(filter) ||
+        (c.UF      || '').toLowerCase().includes(filter) ||
+        (c.GRUPO   || '').toLowerCase().includes(filter) ||
+        (c.DESCRICAO || '').toLowerCase().includes(filter))
+    : clients;
+
+  countEl.textContent = `${filtered.length} registro${filtered.length !== 1 ? 's' : ''}`;
+
+  tbody.innerHTML = filtered.map(c => `<tr>
+    <td>${c.CLIENTE}</td>
+    <td class="mono">${c.UF}</td>
+    <td><span class="mono" style="color:var(--muted)">${c.GRUPO}</span> ${c.DESCRICAO}</td>
+    <td class="r">${BRL.format(c.VLR_12M)}</td>
+    <td class="r">${BRL.format(c.VLR_3M)}</td>
+    <td class="r">${BRL.format(c.VLR_3M_ANT)}</td>
+    <td class="r">${pct(c.TENDENCIA)}</td>
+    <td class="r proj">${BRL.format(c.PROJECAO_3M)}</td>
+  </tr>`).join('');
+}
+
+// ── Cards de resumo ───────────────────────────────────────────────────────
+function renderSummary(s, period) {
+  document.getElementById('c-12m').textContent   = BRLk(s.total_12m);
+  document.getElementById('c-3m').textContent    = BRLk(s.total_3m);
+  document.getElementById('c-proj').textContent  = BRLk(s.total_proj_3m);
+  document.getElementById('c-3m-label').textContent = `vs ${BRLk(s.total_3m_ant)} trim. anterior`;
+
+  const tEl  = document.getElementById('c-trend');
+  const val  = s.trend_pct;
+  tEl.innerHTML = pct(val);
+  tEl.style.fontSize = '15px';
+}
+
+// ── Countdown ─────────────────────────────────────────────────────────────
+function startCountdown() {
+  clearInterval(countdownTimer);
+  countdownSeconds = REFRESH_INTERVAL / 1000;
+
+  const el = document.getElementById('countdown');
+  countdownTimer = setInterval(() => {
+    countdownSeconds--;
+    const m = Math.floor(countdownSeconds / 60);
+    const s = countdownSeconds % 60;
+    el.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    if (countdownSeconds <= 0) {
+      clearInterval(countdownTimer);
+      loadData();
+    }
+  }, 1000);
+}
+
+// ── Carregar dados ────────────────────────────────────────────────────────
+async function loadData() {
+  const overlay = document.getElementById('overlay');
+  const btn     = document.getElementById('btn-refresh');
+  overlay.classList.add('show');
+  btn.classList.add('loading');
+
+  try {
+    const resp = await fetch(API + '?t=' + Date.now());
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    // cabeçalho
+    document.getElementById('last-update').textContent = dateFmt(data.updated_at);
+    document.getElementById('period-badge').textContent =
+      `12M: ${data.period.d_12m.slice(0,4)}/${data.period.d_12m.slice(4,6)} → hoje`;
+
+    renderSummary(data.summary, data.period);
+    renderGroups(data.groups);
+
+    allClients = data.clients;
+    renderClients(allClients, document.getElementById('search-clientes').value.toLowerCase());
+
+    startCountdown();
+  } catch (err) {
+    alert('Erro ao carregar dados:\n' + err.message);
+    console.error(err);
+  } finally {
+    overlay.classList.remove('show');
+    btn.classList.remove('loading');
+  }
+}
+
+// ── Inicialização ─────────────────────────────────────────────────────────
+document.getElementById('btn-refresh').addEventListener('click', loadData);
+loadData();
+</script>
+</body>
+</html>
